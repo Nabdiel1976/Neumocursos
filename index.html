@@ -630,17 +630,44 @@
         </form>
 
         <!-- Form Recuperar -->
-        <form id="formRecover" class="hidden" onsubmit="AuthUI.submitRecover(event)">
+        <div id="formRecover" class="hidden">
           <h3 style="margin:0 0 6px;font-size:18px">Recuperar Contraseña</h3>
           <p style="margin:0 0 14px;font-size:12px;color:#64748b">Recibirás un código temporal de verificación en tu correo.</p>
-          <div class="nc-field"><label>Correo electrónico</label><input id="recEmail" type="email" required class="nc-input" /></div>
-          <button type="submit" class="nc-btn-primary">Enviar Código</button>
+          <form id="recStep1" onsubmit="AuthUI.submitRecover(event)">
+            <div class="nc-field"><label>Correo electrónico</label><input id="recEmail" type="email" required class="nc-input" placeholder="usuario@neumocursos.org" /></div>
+            <button type="submit" id="btnRecoverSend" class="nc-btn-primary">Enviar Código</button>
+          </form>
+          <form id="recStep2" class="hidden" onsubmit="AuthUI.submitRecoverConfirm(event)">
+            <div class="nc-field"><label>Código de 6 dígitos</label><input id="recCode" required class="nc-input" placeholder="123456" /></div>
+            <div class="nc-field">
+              <label>Nueva contraseña (mín. 6 caracteres)</label>
+              <div class="nc-pass-wrap">
+                <input id="recNewPass" type="password" minlength="6" required class="nc-input" />
+                <button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword('recNewPass', this)" aria-label="Mostrar u ocultar nueva contraseña">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="nc-field">
+              <label>Confirmar nueva contraseña</label>
+              <div class="nc-pass-wrap">
+                <input id="recConfirmPass" type="password" minlength="6" required class="nc-input" />
+                <button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword('recConfirmPass', this)" aria-label="Mostrar u ocultar confirmación de contraseña">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="nc-btn-row" style="width:100%">
+              <button type="button" class="nc-btn-out" style="padding:11px 14px" onclick="AuthUI.backToRecoverStep1()">Volver</button>
+              <button type="submit" id="btnRecoverConfirm" class="nc-btn-primary" style="flex:1">Restablecer Contraseña</button>
+            </div>
+          </form>
           <div style="margin-top:14px;text-align:center">
             <a href="javascript:void(0)" onclick="AuthUI.switchTab('login')" style="font-size:12px;color:#475569;font-weight:600;text-decoration:none">
               ← Volver a Iniciar Sesión
             </a>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   </div>
@@ -649,18 +676,20 @@
   <div id="force-change-screen" class="nc-auth-wrap hidden">
     <div class="nc-auth-right" style="width:100%">
       <div class="nc-auth-card" style="max-width:460px">
-        <h3 style="margin:0 0 6px;font-size:19px">Crear Nueva Contraseña</h3>
-        <p style="margin:0 0 16px;font-size:12px;color:#64748b">
-          Ingresaste con una contraseña temporal. Por seguridad, debes ingresar la contraseña temporal
-          y definir tu nueva contraseña antes de acceder al sistema.
+        <h3 style="margin:0 0 4px;font-size:19px">Cambio Obligatorio de Contraseña</h3>
+        <div id="fcAccountInfo" style="margin:0 0 10px;font-size:12px;font-weight:600;color:#475569"></div>
+        <p style="margin:0 0 16px;font-size:12px;color:#64748b;line-height:1.5">
+          Ingresaste con una contraseña temporal enviada a tu correo. Por seguridad, ingresa la
+          <strong>contraseña temporal</strong>, tu <strong>nueva contraseña</strong> y su
+          <strong>confirmación</strong> antes de acceder al sistema.
         </p>
         <div id="forceErr" class="nc-alert-err hidden"></div>
         <form onsubmit="AuthUI.submitTempChange(event)">
           <div class="nc-field">
             <label>Contraseña temporal (recibida por correo)</label>
             <div class="nc-pass-wrap">
-              <input id="fcTempPass" type="password" required class="nc-input" />
-              <button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword('fcTempPass', this)" aria-label="Mostrar u ocultar contraseña">
+              <input id="fcTempPass" type="password" required autocomplete="current-password" class="nc-input" placeholder="Ingresa la contraseña temporal" />
+              <button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword('fcTempPass', this)" aria-label="Mostrar u ocultar contraseña temporal">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
@@ -668,8 +697,8 @@
           <div class="nc-field">
             <label>Nueva contraseña (mín. 6 caracteres)</label>
             <div class="nc-pass-wrap">
-              <input id="fcNewPass" type="password" minlength="6" required class="nc-input" />
-              <button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword('fcNewPass', this)" aria-label="Mostrar u ocultar contraseña">
+              <input id="fcNewPass" type="password" minlength="6" required autocomplete="new-password" class="nc-input" placeholder="Mínimo 6 caracteres" />
+              <button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword('fcNewPass', this)" aria-label="Mostrar u ocultar nueva contraseña">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
@@ -677,8 +706,8 @@
           <div class="nc-field">
             <label>Confirmar nueva contraseña</label>
             <div class="nc-pass-wrap">
-              <input id="fcConfirmPass" type="password" minlength="6" required class="nc-input" />
-              <button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword('fcConfirmPass', this)" aria-label="Mostrar u ocultar contraseña">
+              <input id="fcConfirmPass" type="password" minlength="6" required autocomplete="new-password" class="nc-input" placeholder="Repite la nueva contraseña" />
+              <button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword('fcConfirmPass', this)" aria-label="Mostrar u ocultar confirmación de contraseña">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
@@ -942,11 +971,36 @@
       if (type === 'ok' && text) { ok.textContent = text; ok.classList.remove('hidden'); }
     }
 
+    var EYE_OPEN_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    var EYE_CLOSE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+    function resetPasswordFields(ids) {
+      (ids || []).forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.value = '';
+        el.type = 'password';
+        var btn = el.parentNode && el.parentNode.querySelector('.nc-pass-eye');
+        if (btn) btn.innerHTML = EYE_OPEN_SVG;
+      });
+    }
+
     function switchTab(tab) {
       showMsg('', '');
       ['login', 'register', 'recover'].forEach(function (t) {
         document.getElementById('form' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('hidden', t !== tab);
       });
+      if (tab === 'recover') {
+        backToRecoverStep1();
+      }
+    }
+
+    function backToRecoverStep1() {
+      var s1 = document.getElementById('recStep1');
+      var s2 = document.getElementById('recStep2');
+      if (s1) s1.classList.remove('hidden');
+      if (s2) s2.classList.add('hidden');
+      resetPasswordFields(['recNewPass', 'recConfirmPass']);
     }
 
     function submitLogin(e) {
@@ -962,6 +1016,7 @@
         password: document.getElementById('loginPassword').value,
         rememberMe: rememberMe
       }).then(function (data) {
+        resetPasswordFields(['loginPassword']);
         AppClient.setToken(data.token, rememberMe);
         AppMain.onAuthenticated(data.user);
       }).catch(function (err) {
@@ -997,19 +1052,60 @@
       var show = el.type === 'password';
       el.type = show ? 'text' : 'password';
       if (btn) {
-        btn.innerHTML = show
-          ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
-          : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+        btn.innerHTML = show ? EYE_CLOSE_SVG : EYE_OPEN_SVG;
       }
     }
 
     function submitRecover(e) {
       e.preventDefault();
+      showMsg('', '');
+      var btn = document.getElementById('btnRecoverSend');
+      if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
       AppClient.callApi('auth.recoverRequest', {
         email: document.getElementById('recEmail').value
       }).then(function (res) {
         showMsg('ok', res.message);
-      }).catch(function (err) { showMsg('err', err.message); });
+        var s1 = document.getElementById('recStep1');
+        var s2 = document.getElementById('recStep2');
+        if (s1) s1.classList.add('hidden');
+        if (s2) s2.classList.remove('hidden');
+      }).catch(function (err) {
+        showMsg('err', err && err.message ? err.message : String(err));
+      }).finally(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Enviar Código'; }
+      });
+    }
+
+    function submitRecoverConfirm(e) {
+      e.preventDefault();
+      showMsg('', '');
+      var code = String(document.getElementById('recCode').value || '').trim();
+      var newPassword = document.getElementById('recNewPass').value;
+      var confirmPass = document.getElementById('recConfirmPass').value;
+      if (newPassword.length < 6) {
+        showMsg('err', 'La nueva contraseña debe tener al menos 6 caracteres.');
+        return;
+      }
+      if (newPassword !== confirmPass) {
+        showMsg('err', 'Las contraseñas nuevas no coinciden.');
+        return;
+      }
+      var btn = document.getElementById('btnRecoverConfirm');
+      if (btn) { btn.disabled = true; btn.textContent = 'Actualizando...'; }
+      AppClient.callApi('auth.recoverConfirm', {
+        email: document.getElementById('recEmail').value,
+        code: code,
+        newPassword: newPassword
+      }).then(function (res) {
+        document.getElementById('recCode').value = '';
+        resetPasswordFields(['recNewPass', 'recConfirmPass']);
+        switchTab('login');
+        showMsg('ok', (res && res.message) || 'Contraseña actualizada correctamente.');
+      }).catch(function (err) {
+        showMsg('err', err && err.message ? err.message : String(err));
+      }).finally(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Restablecer Contraseña'; }
+      });
     }
 
     function submitTempChange(e) {
@@ -1019,6 +1115,21 @@
       var tempPassword = document.getElementById('fcTempPass').value;
       var newPassword = document.getElementById('fcNewPass').value;
       var confirmPass = document.getElementById('fcConfirmPass').value;
+      if (!tempPassword) {
+        errEl.textContent = 'Ingresa la contraseña temporal recibida en tu correo.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      if (newPassword.length < 6) {
+        errEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      if (tempPassword === newPassword) {
+        errEl.textContent = 'La nueva contraseña debe ser diferente a la contraseña temporal.';
+        errEl.classList.remove('hidden');
+        return;
+      }
       if (newPassword !== confirmPass) {
         errEl.textContent = 'Las contraseñas nuevas no coinciden.';
         errEl.classList.remove('hidden');
@@ -1026,30 +1137,34 @@
       }
       var btn = document.getElementById('btnForceSubmit');
       btn.disabled = true;
+      btn.textContent = 'Actualizando...';
       AppClient.callApi('auth.completeTempChange', {
         tempPassword: tempPassword,
         newPassword: newPassword,
+        confirmPassword: confirmPass,
         nombre: document.getElementById('fcNombre').value,
         cedula: document.getElementById('fcCedula').value
       }).then(function (updatedUser) {
-        document.getElementById('fcTempPass').value = '';
-        document.getElementById('fcNewPass').value = '';
-        document.getElementById('fcConfirmPass').value = '';
+        resetPasswordFields(['fcTempPass', 'fcNewPass', 'fcConfirmPass']);
         AppMain.onAuthenticated(updatedUser);
       }).catch(function (err) {
-        errEl.textContent = err.message;
+        errEl.textContent = err && err.message ? err.message : String(err);
         errEl.classList.remove('hidden');
       }).finally(function () {
         btn.disabled = false;
+        btn.textContent = 'Guardar Nueva Contraseña y Entrar';
       });
     }
 
     return {
       switchTab: switchTab,
+      backToRecoverStep1: backToRecoverStep1,
       submitLogin: submitLogin,
       submitCreateResident: submitCreateResident,
       togglePassword: togglePassword,
+      resetPasswordFields: resetPasswordFields,
       submitRecover: submitRecover,
+      submitRecoverConfirm: submitRecoverConfirm,
       submitTempChange: submitTempChange
     };
   })();
@@ -1297,8 +1412,13 @@
       if (user.mustChangePassword) {
         document.getElementById('pc-shell').classList.add('hidden');
         document.getElementById('mobile-shell').classList.add('hidden');
-        document.getElementById('force-change-screen').classList.remove('hidden');
+        var forceErr = document.getElementById('forceErr');
+        if (forceErr) { forceErr.textContent = ''; forceErr.classList.add('hidden'); }
+        AuthUI.resetPasswordFields(['fcTempPass', 'fcNewPass', 'fcConfirmPass']);
+        var accInfo = document.getElementById('fcAccountInfo');
+        if (accInfo) accInfo.textContent = 'Cuenta: ' + (user.email || '') + ' (' + (user.role || '') + ')';
         document.getElementById('fcProfileExtra').classList.toggle('hidden', user.role !== 'RESIDENTE');
+        document.getElementById('force-change-screen').classList.remove('hidden');
         return;
       }
 
@@ -3459,7 +3579,14 @@
                 '<option value="R3"' + (uRec.grado === 'R3' ? ' selected' : '') + '>R3</option>' +
               '</select></div>' +
             '</div>' +
-            '<div class="nc-field"><label>' + (editingId ? 'Nueva contraseña (opcional)' : 'Contraseña (vacío = enviar temporal)') + '</label><input id="nuPass" type="password" minlength="6" class="nc-input" placeholder="' + (editingId ? 'Dejar vacío para conservar actual' : 'Clave o vacío para temporal') + '" /></div>' +
+            '<div class="nc-field"><label>' + (editingId ? 'Nueva contraseña (opcional)' : 'Contraseña (vacío = enviar temporal)') + '</label>' +
+              '<div class="nc-pass-wrap">' +
+                '<input id="nuPass" type="password" minlength="6" class="nc-input" placeholder="' + (editingId ? 'Dejar vacío para conservar actual' : 'Clave o vacío para enviar temporal') + '" />' +
+                '<button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword(\'nuPass\', this)" aria-label="Mostrar u ocultar contraseña">' +
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' +
+                '</button>' +
+              '</div>' +
+            '</div>' +
             '<label style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;margin-bottom:16px;cursor:pointer">' +
               '<input id="nuActive" type="checkbox" ' + (uRec.active !== false ? 'checked' : '') + ' /> Cuenta Activa' +
             '</label>' +
@@ -3488,9 +3615,14 @@
       var isEdit = Boolean(editingId);
       var action = isEdit ? 'users.update' : 'users.create';
       if (isEdit) payload.id = editingId;
-      AppClient.callApi(action, payload).then(function () {
+      AppClient.callApi(action, payload).then(function (res) {
         closeNcModal();
-        showModuleNotice_('usersNotice', 'ok', isEdit ? 'Usuario actualizado correctamente.' : 'Usuario creado correctamente.');
+        var msg = isEdit
+          ? 'Usuario actualizado correctamente.'
+          : (res && res.mustChangePassword
+              ? 'Usuario creado con contraseña temporal enviada a ' + payload.email + (res.tempPassword ? ' (' + res.tempPassword + ')' : '') + '. Al ingresar deberá cambiarla.'
+              : 'Usuario creado correctamente.');
+        showModuleNotice_('usersNotice', 'ok', msg);
         refreshUsersTable();
       }).catch(function (err) {
         showModuleNotice_('usersNotice', 'err', err && err.message ? err.message : String(err));
