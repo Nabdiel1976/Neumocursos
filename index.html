@@ -1075,6 +1075,32 @@
     var mobPopstateBound_ = false;
     var mobManagerState = { portal: null, cards: [], editingCardId: null, section: 'structure' };
 
+    var DEFAULT_ACTIVITY_TYPES_ = ['Clase', 'Clase y Examen', 'Seminario', 'Revista Clínica', 'Taller'];
+    var cfgActivityTypesState_ = DEFAULT_ACTIVITY_TYPES_.slice();
+
+    function getActivityTypes_() {
+      var cfg = window.__APP_CONFIG__ || {};
+      var raw = cfg.activityTypes;
+      if (typeof raw === 'string') {
+        var trimmed = raw.trim();
+        if (trimmed) {
+          try { raw = JSON.parse(trimmed); } catch (e) { raw = trimmed.split(/[;,]/); }
+        } else {
+          raw = null;
+        }
+      }
+      if (!Array.isArray(raw)) return DEFAULT_ACTIVITY_TYPES_.slice();
+      var seen = {};
+      var out = [];
+      for (var i = 0; i < raw.length; i++) {
+        var lbl = String(raw[i] == null ? '' : raw[i]).trim();
+        if (!lbl || seen[lbl]) continue;
+        seen[lbl] = true;
+        out.push(lbl);
+      }
+      return out.length ? out : DEFAULT_ACTIVITY_TYPES_.slice();
+    }
+
     function calcMobCarouselHeight_(cardCount, cardCols) {
       var count = Number(cardCount) > 0 ? Number(cardCount) : 4;
       var cols = Number(cardCols) === 1 ? 1 : 2;
@@ -1945,7 +1971,15 @@
           var today = new Date().toISOString().slice(0, 10);
 
           if (openCreate || editRecord) {
-            var aRec = editRecord || { tipo: 'Clase', fecha: today, hora: '08:00', sedeId: (sedes[0] && sedes[0].id) || 'SEDE-HUC' };
+            var actTypes = getActivityTypes_();
+            var aRec = editRecord || { tipo: (actTypes[0] || 'Clase'), fecha: today, hora: '08:00', sedeId: (sedes[0] && sedes[0].id) || 'SEDE-HUC' };
+            var tipoOptsList = actTypes.slice();
+            if (aRec.tipo && tipoOptsList.indexOf(aRec.tipo) === -1) {
+              tipoOptsList.push(aRec.tipo);
+            }
+            var tipoOptsHtml = tipoOptsList.map(function (tp) {
+              return '<option value="' + esc(tp) + '"' + (aRec.tipo === tp ? ' selected' : '') + '>' + esc(tp) + '</option>';
+            }).join('');
             var sedeOpts = sedes.map(function (s) {
               return '<option value="' + esc(s.id) + '"' + (aRec.sedeId === s.id ? ' selected' : '') + '>' + esc(s.nombre) + '</option>';
             }).join('');
@@ -1957,13 +1991,7 @@
                 '<form onsubmit="AppMain.saveActividad(event)">' +
                   '<div class="nc-form-grid">' +
                     '<div class="nc-field"><label>Título de la clase o actividad *</label><input id="aTitulo" required class="nc-input" value="' + esc(aRec.titulo || '') + '" placeholder="Título *" /></div>' +
-                    '<div class="nc-field"><label>Tipo</label><select id="aTipo" class="nc-input">' +
-                      '<option value="Clase"' + (aRec.tipo === 'Clase' ? ' selected' : '') + '>Clase</option>' +
-                      '<option value="Clase y Examen"' + (aRec.tipo === 'Clase y Examen' ? ' selected' : '') + '>Clase y Examen</option>' +
-                      '<option value="Seminario"' + (aRec.tipo === 'Seminario' ? ' selected' : '') + '>Seminario</option>' +
-                      '<option value="Revista Clínica"' + (aRec.tipo === 'Revista Clínica' ? ' selected' : '') + '>Revista Clínica</option>' +
-                      '<option value="Taller"' + (aRec.tipo === 'Taller' ? ' selected' : '') + '>Taller</option>' +
-                    '</select></div>' +
+                    '<div class="nc-field"><label>Tipo</label><select id="aTipo" class="nc-input">' + tipoOptsHtml + '</select></div>' +
                     '<div class="nc-field"><label>Fecha *</label><input id="aFecha" type="date" required value="' + esc(aRec.fecha || today) + '" class="nc-input" /></div>' +
                     '<div class="nc-field"><label>Hora *</label><input id="aHora" type="time" required value="' + esc(aRec.hora || '08:00') + '" class="nc-input" /></div>' +
                     '<div class="nc-field"><label>Lugar / Aula *</label><input id="aLugar" required class="nc-input" value="' + esc(aRec.lugar || '') + '" placeholder="Lugar / Aula *" /></div>' +
@@ -2168,11 +2196,27 @@
               '</div>' +
               '<div class="nc-field"><label>Descripción Institucional (Panel Login PC)</label><textarea id="cfgLoginHeroDesc" rows="2" class="nc-input">' + esc(cfg.loginHeroDesc || 'Inicia sesión con tu cuenta institucional. Los residentes pueden crear su acceso con su correo electrónico; los docentes son registrados exclusivamente por el Super Administrador.') + '</textarea></div>' +
             '</div>' +
-            '<div class="nc-btn-row" style="margin-top:8px">' +
+            '<div style="border-top:1px solid #f1f5f9;padding-top:14px;margin-top:8px">' +
+              '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">' +
+                '<div>' +
+                  '<h4 style="margin:0;font-size:13px;color:#0f172a">Tipos de Actividad (Lista desplegable del módulo Actividades)</h4>' +
+                  '<div style="font-size:11px;color:#64748b;margin-top:2px">Edita, agrega, reordena o elimina las opciones mostradas en el campo "Tipo" al crear actividades.</div>' +
+                '</div>' +
+                '<button type="button" class="nc-btn-out" style="font-size:11px;padding:6px 10px" onclick="AppMain.cfgResetActivityTypes()">Restaurar predeterminados</button>' +
+              '</div>' +
+              '<div id="cfgActivityTypesList" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;margin-bottom:10px"></div>' +
+              '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
+                '<input id="cfgNewActivityType" class="nc-input" style="flex:1;min-width:220px" placeholder="Nuevo tipo de actividad (ej: Caso Clínico, Discusión Bibliográfica)..." onkeydown="if(event.key===\'Enter\'){event.preventDefault();AppMain.cfgAddActivityType();}" />' +
+                '<button type="button" class="nc-btn-sm" onclick="AppMain.cfgAddActivityType()">+ Agregar Tipo</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="nc-btn-row" style="margin-top:14px">' +
               '<button type="button" class="nc-btn-sm" onclick="AppMain.saveCfg()">Guardar Configuración</button>' +
               '<button type="button" class="nc-btn-out" onclick="AppMain.cancelToPrev()">Cancelar</button>' +
             '</div>' +
           '</div>';
+        cfgActivityTypesState_ = getActivityTypes_();
+        renderCfgActivityTypes_();
       }
     }
 
@@ -3704,7 +3748,90 @@
       }
     }
 
+    function renderCfgActivityTypes_() {
+      var box = document.getElementById('cfgActivityTypesList');
+      if (!box) return;
+      if (!cfgActivityTypesState_.length) {
+        cfgActivityTypesState_ = DEFAULT_ACTIVITY_TYPES_.slice();
+      }
+      box.innerHTML = cfgActivityTypesState_.map(function (item, idx) {
+        var isFirst = idx === 0;
+        var isLast = idx === cfgActivityTypesState_.length - 1;
+        var onlyOne = cfgActivityTypesState_.length <= 1;
+        return '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc">' +
+          '<span style="width:20px;text-align:center;font-size:11px;font-weight:700;color:#94a3b8">' + (idx + 1) + '</span>' +
+          '<input class="nc-input" style="flex:1;min-width:0;padding:6px 9px;font-size:12px;background:#fff" value="' + esc(item) + '" oninput="AppMain.cfgUpdateActivityType(' + idx + ', this.value)" placeholder="Nombre del tipo" />' +
+          '<button type="button" class="nc-btn-out" style="padding:5px 8px;font-size:11px" ' + (isFirst ? 'disabled ' : '') + 'onclick="AppMain.cfgMoveActivityType(' + idx + ', -1)" title="Subir">↑</button>' +
+          '<button type="button" class="nc-btn-out" style="padding:5px 8px;font-size:11px" ' + (isLast ? 'disabled ' : '') + 'onclick="AppMain.cfgMoveActivityType(' + idx + ', 1)" title="Bajar">↓</button>' +
+          '<button type="button" class="nc-btn-del" style="padding:5px 8px;font-size:11px" ' + (onlyOne ? 'disabled ' : '') + 'onclick="AppMain.cfgRemoveActivityType(' + idx + ')" title="Eliminar">✕</button>' +
+        '</div>';
+      }).join('');
+    }
+
+    function cfgAddActivityType() {
+      var inp = document.getElementById('cfgNewActivityType');
+      var val = inp ? String(inp.value || '').trim() : '';
+      if (!val) return;
+      var exists = cfgActivityTypesState_.some(function (t) {
+        return String(t || '').trim().toLowerCase() === val.toLowerCase();
+      });
+      if (exists) {
+        showModuleNotice_('cfgNoticeSlot', 'err', 'El tipo "' + val + '" ya existe en la lista.');
+        return;
+      }
+      cfgActivityTypesState_.push(val);
+      if (inp) inp.value = '';
+      renderCfgActivityTypes_();
+    }
+
+    function cfgUpdateActivityType(idx, val) {
+      if (idx >= 0 && idx < cfgActivityTypesState_.length) {
+        cfgActivityTypesState_[idx] = String(val == null ? '' : val);
+      }
+    }
+
+    function cfgMoveActivityType(idx, delta) {
+      var target = idx + delta;
+      if (target < 0 || target >= cfgActivityTypesState_.length) return;
+      var tmp = cfgActivityTypesState_[idx];
+      cfgActivityTypesState_[idx] = cfgActivityTypesState_[target];
+      cfgActivityTypesState_[target] = tmp;
+      renderCfgActivityTypes_();
+    }
+
+    function cfgRemoveActivityType(idx) {
+      if (cfgActivityTypesState_.length <= 1) return;
+      cfgActivityTypesState_.splice(idx, 1);
+      renderCfgActivityTypes_();
+    }
+
+    function cfgResetActivityTypes() {
+      cfgActivityTypesState_ = DEFAULT_ACTIVITY_TYPES_.slice();
+      var inp = document.getElementById('cfgNewActivityType');
+      if (inp) inp.value = '';
+      renderCfgActivityTypes_();
+    }
+
+    function getSanitizedCfgActivityTypes_() {
+      var seen = {};
+      var cleaned = [];
+      for (var i = 0; i < cfgActivityTypesState_.length; i++) {
+        var lbl = String(cfgActivityTypesState_[i] == null ? '' : cfgActivityTypesState_[i]).trim();
+        if (!lbl || seen[lbl]) continue;
+        seen[lbl] = true;
+        cleaned.push(lbl);
+      }
+      var inp = document.getElementById('cfgNewActivityType');
+      var pending = inp ? String(inp.value || '').trim() : '';
+      if (pending && !seen[pending]) {
+        cleaned.push(pending);
+        if (inp) inp.value = '';
+      }
+      return cleaned.length ? cleaned : DEFAULT_ACTIVITY_TYPES_.slice();
+    }
+
     function saveCfg() {
+      var cleanTypes = getSanitizedCfgActivityTypes_();
       AppClient.callApi('config.update', {
         appName: document.getElementById('cfgAppName').value,
         institutionName: document.getElementById('cfgInstName').value,
@@ -3719,11 +3846,14 @@
         loginCardTitle: (document.getElementById('cfgLoginCardTitle') || {}).value || '',
         loginHeroTitle: (document.getElementById('cfgLoginHeroTitle') || {}).value || '',
         loginCardSubtitle: (document.getElementById('cfgLoginCardSub') || {}).value || '',
-        loginHeroDesc: (document.getElementById('cfgLoginHeroDesc') || {}).value || ''
+        loginHeroDesc: (document.getElementById('cfgLoginHeroDesc') || {}).value || '',
+        activityTypes: cleanTypes
       }).then(function (updated) {
         window.__APP_CONFIG__ = updated;
         applyBranding(updated);
-        showModuleNotice_('cfgNoticeSlot', 'ok', 'Configuración guardada en base de datos.');
+        cfgActivityTypesState_ = getActivityTypes_();
+        renderCfgActivityTypes_();
+        showModuleNotice_('cfgNoticeSlot', 'ok', 'Configuración y listas desplegables guardadas en base de datos.');
       }).catch(function (err) {
         showModuleNotice_('cfgNoticeSlot', 'err', err && err.message ? err.message : String(err));
       });
@@ -5101,6 +5231,11 @@
       confirmDeleteRole: confirmDeleteRole,
       cfgUploadLogo: cfgUploadLogo,
       cfgClearLogo: cfgClearLogo,
+      cfgAddActivityType: cfgAddActivityType,
+      cfgUpdateActivityType: cfgUpdateActivityType,
+      cfgMoveActivityType: cfgMoveActivityType,
+      cfgRemoveActivityType: cfgRemoveActivityType,
+      cfgResetActivityTypes: cfgResetActivityTypes,
       saveCfg: saveCfg,
       openExamModal: openExamModal,
       saveExamForm: saveExamForm,
