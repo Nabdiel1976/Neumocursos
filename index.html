@@ -806,7 +806,7 @@
   // Pega aquí una sola vez la URL de tu Web App de Google Apps Script (/exec)
   // antes de subir este index.html a tu hosting.
   // =========================================================================
-  var GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxjqyJXBjNbC2sGsJpvLKZLS8wmEatpHj5y8VIMXab4BXqGwcL8aDWsZKyZwAHONO0/exec';
+  var GAS_WEBAPP_URL = 'PEGA_AQUI_TU_URL_DE_GOOGLE_APPS_SCRIPT_EXEC';
 
   var AppClient = (function () {
     var TOKEN_KEY = 'nc_session_token';
@@ -3509,8 +3509,17 @@
         for (var dd = 1; dd <= daysInMonth; dd++) {
           var dayIso = attState.month + '-' + (dd < 10 ? '0' + dd : String(dd));
           var x = marginX + colNameW + colCedW + (dd - 1) * dayColW;
+          var resMailLow = String(res.correo || '').trim().toLowerCase();
+          var resMailPref = resMailLow ? resMailLow.split('@')[0] : '';
+          var resNameLow = String(res.nombreCompleto || '').trim().toLowerCase();
           var ok = atts.some(function (a) {
-            return a.fecha === dayIso && (String(a.residenteId) === String(res.id) || (res.cedula && a.residenteCedula === res.cedula) || String(a.residenteNombre || '').toLowerCase() === String(res.nombreCompleto || '').toLowerCase());
+            if (a.fecha !== dayIso) return false;
+            var aNameLow = String(a.residenteNombre || '').trim().toLowerCase();
+            return String(a.residenteId) === String(res.id) ||
+              (res.cedula && a.residenteCedula === res.cedula) ||
+              (resNameLow && aNameLow === resNameLow) ||
+              (resMailLow && aNameLow === resMailLow) ||
+              (resMailPref && aNameLow && aNameLow.indexOf(' ') === -1 && aNameLow === resMailPref);
           });
           if (ok) {
             rowTot++;
