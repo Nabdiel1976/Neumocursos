@@ -139,6 +139,10 @@
   .nc-btn-edit:hover { background: #dbeafe; }
   .nc-btn-del { border: 0; border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 600; cursor: pointer; background: #fef2f2; color: #b91c1c; }
   .nc-btn-del:hover { background: #fee2e2; }
+  .nc-btn-eye { border: 1px solid #a7f3d0; border-radius: 7px; padding: 4px 7px; font-size: 11px; font-weight: 600; cursor: pointer; background: #ecfdf5; color: #047857; display: inline-flex; align-items: center; justify-content: center; }
+  .nc-btn-eye:hover { background: #d1fae5; }
+  .nc-btn-eye.is-inactive { border-color: #fde68a; background: #fffbeb; color: #b45309; }
+  .nc-btn-eye.is-inactive:hover { background: #fef3c7; }
   .nc-btn-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .nc-head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
   .nc-quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
@@ -2790,6 +2794,21 @@
       });
     }
 
+    function isResActive_(r) {
+      if (!r) return false;
+      if (r.activo === false) return false;
+      if (r.activo === undefined || r.activo === null || r.activo === '') return true;
+      var s = String(r.activo).trim().toLowerCase();
+      return s !== 'false' && s !== '0' && s !== 'inactivo';
+    }
+
+    function eyeIconSvg_(active) {
+      if (active) {
+        return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+      }
+      return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>';
+    }
+
     function buildResidentsTableHtml_(res, sedeMap) {
       var items = (res && res.items) || [];
       if (!items.length) {
@@ -2799,10 +2818,14 @@
       var rows = items.map(function (r) {
         var tels = [r.telefono1, r.telefono2].filter(Boolean).join(' / ') || '—';
         var sedeName = (sedeMap && sedeMap[r.sedeId]) || r.sedeId || '—';
+        var isAct = isResActive_(r);
         var neumoUser = r.usuarioNeumo
           ? '<code>' + esc(r.usuarioNeumo) + '</code>' + (r.contrasenaNeumo ? '<br><small style="color:#64748b">Clave: ' + esc(r.contrasenaNeumo) + '</small>' : '')
           : '<span style="color:#94a3b8">—</span>';
-        return '<tr>' +
+        var statusBadge = isAct
+          ? '<span class="nc-badge" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0">Activo</span>'
+          : '<span class="nc-badge" style="background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1">Inactivo</span>';
+        return '<tr' + (isAct ? '' : ' style="opacity:0.65;background:#f8fafc"') + '>' +
           '<td><strong>' + esc(r.nombreCompleto) + '</strong><br><small style="color:#64748b">' + esc(r.correo || 'Sin correo') + '</small></td>' +
           '<td>' + esc(r.cedula) + '</td>' +
           '<td>' + esc(tels) + '</td>' +
@@ -2810,16 +2833,18 @@
           '<td>' + esc(sedeName) + '</td>' +
           '<td>' + esc(r.coordinador || '—') + '</td>' +
           '<td>' + neumoUser + '</td>' +
+          '<td>' + statusBadge + '</td>' +
           (canEdit
             ? '<td style="text-align:right;white-space:nowrap"><div class="nc-btn-row">' +
                 '<button type="button" class="nc-btn-edit" onclick="AppMain.editItem(\'residents\', \'' + esc(r.id) + '\')">Modificar</button>' +
                 '<button type="button" class="nc-btn-del" onclick="AppMain.deleteItem(\'residentes.delete\', \'' + esc(r.id) + '\', \'residents\')">Eliminar</button>' +
+                '<button type="button" class="nc-btn-eye' + (isAct ? '' : ' is-inactive') + '" title="' + (isAct ? 'Activo — clic para desactivar' : 'Inactivo — clic para activar') + '" aria-label="' + (isAct ? 'Desactivar residente' : 'Activar residente') + '" onclick="AppMain.toggleResidenteActivo(\'' + esc(r.id) + '\')">' + eyeIconSvg_(isAct) + '</button>' +
               '</div></td>'
             : '') +
         '</tr>';
       }).join('');
       return '<div style="overflow-x:auto"><table class="nc-table">' +
-        '<thead><tr><th>Nombres y Apellidos</th><th>Cédula</th><th>Teléfonos</th><th>Grado</th><th>Sede</th><th>Coordinador</th><th>Usuario Neumocursos</th>' + (canEdit ? '<th style="text-align:right">Acciones</th>' : '') + '</tr></thead>' +
+        '<thead><tr><th>Nombres y Apellidos</th><th>Cédula</th><th>Teléfonos</th><th>Grado</th><th>Sede</th><th>Coordinador</th><th>Usuario Neumocursos</th><th>Estado</th>' + (canEdit ? '<th style="text-align:right">Acciones</th>' : '') + '</tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div>' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:#64748b">' +
           '<span>Página ' + res.page + ' de ' + res.totalPages + ' · ' + res.total + ' residente(s)</span>' +
@@ -2828,6 +2853,17 @@
             '<button type="button" class="nc-btn-out" ' + (res.page >= res.totalPages ? 'disabled' : '') + ' onclick="AppMain.goResPage(' + Math.min(res.totalPages, res.page + 1) + ')">Siguiente</button>' +
           '</div>' +
         '</div>';
+    }
+
+    function toggleResidenteActivo(id) {
+      var rec = editCache.residents && editCache.residents[id];
+      var nextActivo = rec ? !isResActive_(rec) : false;
+      AppClient.callApi('residentes.toggleActive', { id: id, activo: nextActivo }).then(function () {
+        refreshResidentsList_();
+      }).catch(function (err) {
+        var slot = document.getElementById('resNoticeSlot');
+        if (slot) slot.innerHTML = '<div class="nc-alert-err">' + esc(err && err.message ? err.message : String(err)) + '</div>';
+      });
     }
 
     var resSearchTimer_ = 0;
@@ -3453,7 +3489,7 @@
       var cy = drawHdr(24);
       var rowH = 5.8;
       var atts = d.attendances || [];
-      (d.residents || []).forEach(function (res) {
+      (d.residents || []).filter(isResActive_).forEach(function (res) {
         if (cy + rowH > pageH - 14) {
           doc.addPage();
           pNum++;
@@ -4193,7 +4229,7 @@
         AppClient.callApi('actividades.list')
       ];
       if (currentUser && currentUser.role === 'SUPERADMIN') {
-        calls.push(AppClient.callApi('residentes.list', { page: 1, limit: 200 }));
+        calls.push(AppClient.callApi('residentes.list', { page: 1, limit: 200, activeOnly: true }));
       }
       Promise.all(calls).then(function (results) {
         examState.list = results[0] || [];
@@ -5674,6 +5710,7 @@
       downloadResidentsTemplate: downloadResidentsTemplate,
       uploadResidentsBulkExcel: uploadResidentsBulkExcel,
       saveResidente: saveResidente,
+      toggleResidenteActivo: toggleResidenteActivo,
       saveCoordinador: saveCoordinador,
       saveSede: saveSede,
       saveActividad: saveActividad,
