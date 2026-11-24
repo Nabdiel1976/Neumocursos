@@ -4229,7 +4229,7 @@
         AppClient.callApi('actividades.list')
       ];
       if (currentUser && currentUser.role === 'SUPERADMIN') {
-        calls.push(AppClient.callApi('residentes.list', { page: 1, limit: 200, activeOnly: true }));
+        calls.push(AppClient.callApi('residentes.list', { page: 1, limit: 200 }));
       }
       Promise.all(calls).then(function (results) {
         examState.list = results[0] || [];
