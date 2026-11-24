@@ -764,7 +764,7 @@
           <input id="globalSearch" class="nc-search" placeholder="Buscar en el sistema..." />
         </div>
         <div style="display:flex;align-items:center;gap:12px">
-          <div id="userChip" style="font-size:13px;font-weight:600"></div>
+          <button type="button" id="userChip" onclick="AppMain.navigate('profile')" title="Mi Perfil" style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;border-radius:999px;border:1px solid #e2e8f0;background:#fff;font-size:13px;font-weight:600;color:#0f172a;cursor:pointer"></button>
           <button type="button" class="nc-btn-out" onclick="AppMain.logout()">Cerrar Sesión</button>
         </div>
       </header>
@@ -783,7 +783,7 @@
         </div>
       </div>
       <div class="nc-mob-actions">
-        <button type="button" onclick="AppMain.openMobileView('profile')" class="nc-mob-icon-btn" title="Mi Perfil" aria-label="Mi Perfil">
+        <button type="button" id="mobProfileBtn" onclick="AppMain.openMobileView('profile')" class="nc-mob-icon-btn" style="overflow:hidden;padding:0" title="Mi Perfil" aria-label="Mi Perfil">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </button>
         <button type="button" onclick="AppMain.logout()" class="nc-mob-exit-btn">
@@ -1405,8 +1405,88 @@
       }
     }
 
+    var profileDraftFoto_ = null;
+    var DEFAULT_MOB_PROF_SVG_ = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
+    function normRole_(r) {
+      return String(r || '').trim().toUpperCase();
+    }
+
+    function isRestrictedRole_() {
+      var r = normRole_(currentUser && currentUser.role);
+      return r === 'DOCENTE' || r === 'COORDINADOR';
+    }
+
+    function isCoordinatorRole_() {
+      return normRole_(currentUser && currentUser.role) === 'COORDINADOR';
+    }
+
+    function canManageResidents_() {
+      return Boolean(currentUser) && !isRestrictedRole_() && hasPerm_('residents.manage');
+    }
+
+    function renderUserHeaderChips_() {
+      if (!currentUser) return;
+      var chip = document.getElementById('userChip');
+      if (chip) {
+        var avHtml = currentUser.fotoUrl
+          ? '<img src="' + esc(currentUser.fotoUrl) + '" alt="Foto" style="width:26px;height:26px;border-radius:999px;object-fit:cover;display:block" />'
+          : '<span style="width:26px;height:26px;border-radius:999px;background:#2563eb;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + esc(getInitials_(currentUser.nombre)) + '</span>';
+        chip.innerHTML = avHtml + '<span>' + esc(currentUser.nombre) + ' · ' + esc(currentUser.role) + '</span>';
+      }
+      var mobBtn = document.getElementById('mobProfileBtn');
+      if (mobBtn) {
+        mobBtn.innerHTML = currentUser.fotoUrl
+          ? '<img src="' + esc(currentUser.fotoUrl) + '" alt="Mi Perfil" style="width:100%;height:100%;object-fit:cover;display:block" />'
+          : DEFAULT_MOB_PROF_SVG_;
+      }
+    }
+
+    function compressAvatarFile_(file) {
+      return new Promise(function (resolve, reject) {
+        if (!file) { reject(new Error('No se seleccionó archivo.')); return; }
+        if (!/^image\//i.test(file.type || '')) { reject(new Error('Selecciona una imagen válida (JPG, PNG o WEBP).')); return; }
+        if (file.size > 5 * 1024 * 1024) { reject(new Error('La imagen supera el máximo de 5 MB.')); return; }
+        var reader = new FileReader();
+        reader.onerror = function () { reject(new Error('No se pudo leer la imagen.')); };
+        reader.onload = function (ev) {
+          var img = new Image();
+          img.onerror = function () { reject(new Error('Formato de imagen no soportado.')); };
+          img.onload = function () {
+            var maxDim = 220;
+            var w = img.width || 220;
+            var h = img.height || 220;
+            if (w > maxDim || h > maxDim) {
+              var ratio = Math.min(maxDim / w, maxDim / h);
+              w = Math.max(1, Math.round(w * ratio));
+              h = Math.max(1, Math.round(h * ratio));
+            }
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            if (!ctx) { reject(new Error('No se pudo procesar la fotografía.')); return; }
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            var out = canvas.toDataURL('image/jpeg', 0.82);
+            if (out.length > 42000) out = canvas.toDataURL('image/jpeg', 0.65);
+            if (out.length > 42000) out = canvas.toDataURL('image/jpeg', 0.50);
+            if (out.length > 47000) {
+              reject(new Error('La imagen comprimida sigue siendo pesada para Google Sheets. Usa otra imagen.'));
+              return;
+            }
+            resolve(out);
+          };
+          img.src = String((ev && ev.target && ev.target.result) || '');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
     function onAuthenticated(user) {
       currentUser = user;
+      profileDraftFoto_ = null;
       document.getElementById('auth-screen').classList.add('hidden');
 
       if (user.mustChangePassword) {
@@ -1423,6 +1503,7 @@
       }
 
       document.getElementById('force-change-screen').classList.add('hidden');
+      renderUserHeaderChips_();
       if (user.role === 'RESIDENTE') {
         var pcShell = document.getElementById('pc-shell');
         var mobShell = document.getElementById('mobile-shell');
@@ -1439,6 +1520,7 @@
           renderMobileHome();
           AppClient.callApi('config.public').then(function (pub) {
             if (pub && pub.config) applyBranding(pub.config);
+            renderUserHeaderChips_();
             renderMobileHome();
             maybeShowMobilePopup_();
           }).catch(function () {
@@ -1448,7 +1530,6 @@
       } else {
         document.getElementById('mobile-shell').classList.add('hidden');
         document.getElementById('pc-shell').classList.remove('hidden');
-        document.getElementById('userChip').textContent = user.nombre + ' · ' + user.role;
         renderNav();
         navigate('dashboard');
       }
@@ -1460,6 +1541,7 @@
       cancelMobExit();
       mobCurrentView_ = 'home';
       mobAllowExit_ = false;
+      profileDraftFoto_ = null;
       try {
         if (window.location.hash && window.location.hash.indexOf('#nc-') === 0) {
           window.history.replaceState(null, '', window.location.pathname + window.location.search);
@@ -1492,22 +1574,35 @@
     }
 
     function renderNav() {
-      var tabs = [
-        { id: 'dashboard', label: 'Inicio' },
-        { id: 'activities', label: 'Actividades' },
-        { id: 'attendance', label: 'Asistencia' }
-      ];
+      var tabs = [];
+      var normRole = currentUser ? normRole_(currentUser.role) : '';
+      var isAdmin = normRole === 'SUPERADMIN' || normRole === 'ADMINISTRADOR' || hasPerm_('*');
+      var restricted = isRestrictedRole_();
+      if (hasPerm_('dashboard.view') || isAdmin) {
+        tabs.push({ id: 'dashboard', label: 'Inicio' });
+      }
+      if (hasPerm_('activities.manage')) {
+        tabs.push({ id: 'activities', label: 'Actividades' });
+      }
+      if (hasPerm_('attendance.view')) {
+        tabs.push({ id: 'attendance', label: 'Asistencia' });
+      }
       if (hasPerm_('exams.manage')) {
         tabs.push({ id: 'exams', label: 'Evaluación Continua' });
       }
-      tabs.push(
-        { id: 'grades', label: 'Calificaciones Neumocursos' },
-        { id: 'sedes', label: 'Sedes de Postgrado' },
-        { id: 'coordinators', label: 'Coordinadores' },
-        { id: 'residents', label: 'Residentes' }
-      );
-      var normRole = currentUser ? String(currentUser.role || '').trim().toUpperCase() : '';
-      if (normRole === 'SUPERADMIN' || normRole === 'ADMINISTRADOR' || hasPerm_('*')) {
+      if (hasPerm_('grades.view') || hasPerm_('grades.upload')) {
+        tabs.push({ id: 'grades', label: 'Calificaciones Neumocursos' });
+      }
+      if (!restricted && hasPerm_('sedes.manage')) {
+        tabs.push({ id: 'sedes', label: 'Sedes de Postgrado' });
+      }
+      if (!restricted && hasPerm_('coordinators.manage')) {
+        tabs.push({ id: 'coordinators', label: 'Coordinadores' });
+      }
+      if (hasPerm_('residents.view') || hasPerm_('residents.manage')) {
+        tabs.push({ id: 'residents', label: 'Residentes' });
+      }
+      if (isAdmin) {
         tabs.push({ id: 'users', label: 'Usuarios' });
         tabs.push({ id: 'roles', label: 'Roles y permisos' });
         tabs.push({ id: 'mobile-manager', label: 'Pantalla Celular' });
@@ -1519,6 +1614,7 @@
           tabs.push({ id: 'config', label: 'Configuración' });
         }
       }
+      tabs.push({ id: 'profile', label: 'Mi Perfil' });
       var nav = document.getElementById('navLinks');
       nav.innerHTML = tabs.map(function (t) {
         return '<button type="button" class="' + (activeTab === t.id ? 'active' : '') + '" onclick="AppMain.navigate(\'' + t.id + '\')">' + t.label + '</button>';
@@ -1591,6 +1687,7 @@
       'activities.manage': 'Gestionar actividades',
       'exams.manage': 'Evaluación continua (crear y asentar notas)',
       'sedes.manage': 'Gestionar sedes',
+      'residents.view': 'Ver residentes (solo lectura)',
       'residents.manage': 'Gestionar residentes',
       'coordinators.manage': 'Gestionar coordinadores',
       'grades.upload': 'Subir calificaciones Excel',
@@ -1793,31 +1890,26 @@
 
       if (tab === 'dashboard') {
         AppClient.callApi('dashboard.summary').then(function (d) {
+          var qBtns = [];
+          if (canManageResidents_()) {
+            qBtns.push('<button type="button" class="nc-quick-btn" onclick="AppMain.navigate(\'residents\', true)"><div style="font-size:13px;font-weight:700;color:#2563eb">+ Nuevo Residente</div><div style="font-size:11px;color:#64748b;margin-top:4px">Registrar residente R1, R2 o R3</div></button>');
+          }
+          if (!isRestrictedRole_() && hasPerm_('coordinators.manage')) {
+            qBtns.push('<button type="button" class="nc-quick-btn" onclick="AppMain.navigate(\'coordinators\', true)"><div style="font-size:13px;font-weight:700;color:#059669">+ Nuevo Coordinador</div><div style="font-size:11px;color:#64748b;margin-top:4px">Agregar coordinador académico</div></button>');
+          }
+          if (!isRestrictedRole_() && hasPerm_('sedes.manage')) {
+            qBtns.push('<button type="button" class="nc-quick-btn" onclick="AppMain.navigate(\'sedes\', true)"><div style="font-size:13px;font-weight:700;color:#4f46e5">+ Nueva Sede</div><div style="font-size:11px;color:#64748b;margin-top:4px">Registrar sede y archivos Excel</div></button>');
+          }
+          if (hasPerm_('activities.manage')) {
+            qBtns.push('<button type="button" class="nc-quick-btn" onclick="AppMain.navigate(\'activities\', true)"><div style="font-size:13px;font-weight:700;color:#d97706">+ Nueva Actividad</div><div style="font-size:11px;color:#64748b;margin-top:4px">Crear clase y generar código QR</div></button>');
+          }
+          if (hasPerm_('grades.upload')) {
+            qBtns.push('<button type="button" class="nc-quick-btn" style="background:#eff6ff;border-color:#bfdbfe" onclick="AppMain.navigate(\'grades\', true)"><div style="font-size:13px;font-weight:700;color:#1d4ed8">↑ Subir Calificaciones (Excel)</div><div style="font-size:11px;color:#475569;margin-top:4px">Importar archivos .xlsx Cat. 1, 2 y 3</div></button>');
+          }
           vp.innerHTML =
             '<h2 style="margin:0 0 6px">Bienvenido, ' + esc(currentUser.nombre) + '</h2>' +
-            '<p style="margin:0 0 18px;font-size:13px;color:#64748b">Accesos directos para crear registros o subir calificaciones desde Excel.</p>' +
-            '<div class="nc-quick-grid">' +
-              '<button type="button" class="nc-quick-btn" onclick="AppMain.navigate(\'residents\', true)">' +
-                '<div style="font-size:13px;font-weight:700;color:#2563eb">+ Nuevo Residente</div>' +
-                '<div style="font-size:11px;color:#64748b;margin-top:4px">Registrar residente R1, R2 o R3</div>' +
-              '</button>' +
-              '<button type="button" class="nc-quick-btn" onclick="AppMain.navigate(\'coordinators\', true)">' +
-                '<div style="font-size:13px;font-weight:700;color:#059669">+ Nuevo Coordinador</div>' +
-                '<div style="font-size:11px;color:#64748b;margin-top:4px">Agregar coordinador académico</div>' +
-              '</button>' +
-              '<button type="button" class="nc-quick-btn" onclick="AppMain.navigate(\'sedes\', true)">' +
-                '<div style="font-size:13px;font-weight:700;color:#4f46e5">+ Nueva Sede</div>' +
-                '<div style="font-size:11px;color:#64748b;margin-top:4px">Registrar sede y archivos Excel</div>' +
-              '</button>' +
-              '<button type="button" class="nc-quick-btn" onclick="AppMain.navigate(\'activities\', true)">' +
-                '<div style="font-size:13px;font-weight:700;color:#d97706">+ Nueva Actividad</div>' +
-                '<div style="font-size:11px;color:#64748b;margin-top:4px">Crear clase y generar código QR</div>' +
-              '</button>' +
-              '<button type="button" class="nc-quick-btn" style="background:#eff6ff;border-color:#bfdbfe" onclick="AppMain.navigate(\'grades\', true)">' +
-                '<div style="font-size:13px;font-weight:700;color:#1d4ed8">↑ Subir Calificaciones (Excel)</div>' +
-                '<div style="font-size:11px;color:#475569;margin-top:4px">Importar archivos .xlsx Cat. 1, 2 y 3</div>' +
-              '</button>' +
-            '</div>' +
+            '<p style="margin:0 0 18px;font-size:13px;color:#64748b">Accesos directos para tus módulos habilitados en el sistema.</p>' +
+            (qBtns.length ? '<div class="nc-quick-grid">' + qBtns.join('') + '</div>' : '') +
             '<div class="nc-kpi-grid">' +
               '<div class="nc-kpi blue"><div>Calificaciones Nuevas</div><div class="nc-kpi-val">' + d.newGradesCount + '</div></div>' +
               '<div class="nc-kpi green"><div>Asistencias en Aula</div><div class="nc-kpi-val">' + d.totalAsistenciasAula + '</div></div>' +
@@ -1878,6 +1970,10 @@
           '<div id="ncModalRoot"></div>';
         refreshRolesCards();
       } else if (tab === 'sedes') {
+        if (isRestrictedRole_() || !hasPerm_('sedes.manage')) {
+          vp.innerHTML = '<div class="nc-alert-err">Tu rol no tiene acceso al módulo Sedes de Postgrado.</div>';
+          return;
+        }
         AppClient.callApi('sedes.list').then(function (list) {
           editCache.sedes = {};
           list.forEach(function (s) { editCache.sedes[s.id] = s; });
@@ -1930,6 +2026,10 @@
           vp.innerHTML = '<div class="nc-alert-err">' + esc(err && err.message ? err.message : String(err)) + '</div>';
         });
       } else if (tab === 'coordinators') {
+        if (isRestrictedRole_() || !hasPerm_('coordinators.manage')) {
+          vp.innerHTML = '<div class="nc-alert-err">Tu rol no tiene acceso al módulo Coordinadores.</div>';
+          return;
+        }
         Promise.all([
           AppClient.callApi('coordinadores.list', { page: 1, limit: 50 }),
           AppClient.callApi('sedes.list')
@@ -1987,8 +2087,17 @@
           vp.innerHTML = '<div class="nc-alert-err">' + esc(err && err.message ? err.message : String(err)) + '</div>';
         });
       } else if (tab === 'residents') {
+        var canEditRes = canManageResidents_();
+        var isCoord = isCoordinatorRole_();
+        if (isCoord && currentUser && currentUser.sedeId) {
+          resState.sedeId = currentUser.sedeId;
+        }
+        if ((openCreate || editRecord) && !canEditRes) {
+          vp.innerHTML = '<div class="nc-alert-err">Tu rol solo permite visualizar el directorio de residentes sin crear ni modificar registros.</div>';
+          return;
+        }
         Promise.all([
-          AppClient.callApi('residentes.list', { page: resState.page, limit: 25, sedeId: resState.sedeId, search: resState.search }),
+          AppClient.callApi('residentes.list', { page: resState.page, limit: 25, sedeId: isCoord ? (currentUser.sedeId || '') : resState.sedeId, search: resState.search }),
           AppClient.callApi('sedes.list')
         ]).then(function (results) {
           var res = results[0];
@@ -2043,34 +2152,41 @@
             return;
           }
 
-          var filterSedeOpts = '<option value="">Todas las sedes</option>' + sedes.map(function (s) {
-            return '<option value="' + esc(s.id) + '"' + (resState.sedeId === s.id ? ' selected' : '') + '>' + esc(s.nombre) + '</option>';
-          }).join('');
+          var coordSedeName = (currentUser && currentUser.sedeId) ? (sedeMap[currentUser.sedeId] || currentUser.sedeId) : 'Sin sede asignada';
+          var filterSedeOpts = isCoord
+            ? '<option value="' + esc((currentUser && currentUser.sedeId) || '') + '" selected>' + esc(coordSedeName) + '</option>'
+            : '<option value="">Todas las sedes</option>' + sedes.map(function (s) {
+                return '<option value="' + esc(s.id) + '"' + (resState.sedeId === s.id ? ' selected' : '') + '>' + esc(s.nombre) + '</option>';
+              }).join('');
           var noticeHtml = resState.notice
             ? '<div class="' + (resState.noticeType === 'err' ? 'nc-alert-err' : 'nc-alert-ok') + '" style="margin-bottom:12px">' + esc(resState.notice) + '</div>'
             : '';
 
-          vp.innerHTML =
-            '<div class="nc-head-row">' +
-              '<div>' +
-                '<h2 style="margin:0">Residentes de Postgrado (<span id="resTotalBadge">' + res.total + '</span>)</h2>' +
-                '<div style="font-size:12px;color:#64748b">Directorio independiente por sede (sin vinculación con archivos Cat. 1, 2 y 3).</div>' +
-              '</div>' +
-              '<div class="nc-btn-row">' +
+          var resActionsHtml = canEditRes
+            ? '<div class="nc-btn-row">' +
                 '<button type="button" class="nc-btn-out" onclick="AppMain.downloadResidentsTemplate()">⬇ Formato Excel (Carga en Masa)</button>' +
                 '<label class="nc-btn-out" style="cursor:pointer;background:#ecfdf5;border-color:#a7f3d0;color:#065f46">' +
                   '↑ Cargar Excel Masivo' +
                   '<input type="file" accept=".xlsx,.xls" style="display:none" onchange="AppMain.uploadResidentsBulkExcel(this)" />' +
                 '</label>' +
                 '<button type="button" class="nc-btn-sm" onclick="AppMain.navigate(\'residents\', true)">+ Crear Nuevo Residente</button>' +
+              '</div>'
+            : '<span class="nc-badge" style="background:#f1f5f9;color:#475569">Solo lectura</span>';
+
+          vp.innerHTML =
+            '<div class="nc-head-row">' +
+              '<div>' +
+                '<h2 style="margin:0">Residentes de Postgrado (<span id="resTotalBadge">' + res.total + '</span>)</h2>' +
+                '<div style="font-size:12px;color:#64748b">' + (isCoord ? 'Mostrando únicamente los residentes pertenecientes a tu sede asignada (' + esc(coordSedeName) + ').' : 'Directorio independiente por sede (sin vinculación con archivos Cat. 1, 2 y 3).') + '</div>' +
               '</div>' +
+              resActionsHtml +
             '</div>' +
             '<div id="resNoticeSlot">' + noticeHtml + '</div>' +
             '<div class="nc-card">' +
               '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px">' +
                 '<div style="display:flex;align-items:center;gap:6px">' +
-                  '<label style="font-size:12px;font-weight:700;color:#334155">Consultar por Sede:</label>' +
-                  '<select id="resSedeSelect" class="nc-input" style="width:230px;padding:7px 10px;font-size:12px" onchange="AppMain.setResFilter(null, this.value)">' + filterSedeOpts + '</select>' +
+                  '<label style="font-size:12px;font-weight:700;color:#334155">' + (isCoord ? 'Sede Asignada:' : 'Consultar por Sede:') + '</label>' +
+                  '<select id="resSedeSelect" class="nc-input" style="width:230px;padding:7px 10px;font-size:12px" ' + (isCoord ? 'disabled ' : '') + 'onchange="AppMain.setResFilter(null, this.value)">' + filterSedeOpts + '</select>' +
                 '</div>' +
                 '<input id="resSearchInput" class="nc-input" style="width:260px;padding:7px 12px;font-size:12px" placeholder="Buscar por nombre, cédula o usuario..." value="' + esc(resState.search) + '" oninput="AppMain.onResSearchInput(this.value)" />' +
               '</div>' +
@@ -2092,7 +2208,7 @@
 
           if (openCreate || editRecord) {
             var actTypes = getActivityTypes_();
-            var aRec = editRecord || { tipo: (actTypes[0] || 'Clase'), fecha: today, hora: '08:00', sedeId: (sedes[0] && sedes[0].id) || 'SEDE-HUC' };
+            var aRec = editRecord || { tipo: (actTypes[0] || 'Clase'), fecha: today, hora: '08:00', horaInicio: '08:00', horaFin: '', sedeId: (sedes[0] && sedes[0].id) || 'SEDE-HUC' };
             var tipoOptsList = actTypes.slice();
             if (aRec.tipo && tipoOptsList.indexOf(aRec.tipo) === -1) {
               tipoOptsList.push(aRec.tipo);
@@ -2103,17 +2219,20 @@
             var sedeOpts = sedes.map(function (s) {
               return '<option value="' + esc(s.id) + '"' + (aRec.sedeId === s.id ? ' selected' : '') + '>' + esc(s.nombre) + '</option>';
             }).join('');
+            var iniVal = normActHHMM_(aRec.horaInicio || aRec.hora) || '08:00';
+            var finVal = normActHHMM_(aRec.horaFin);
             vp.innerHTML =
               '<div class="nc-head-row">' +
-                '<div><h2 style="margin:0">' + (editingId ? 'Modificar Actividad Académica' : 'Registrar Nueva Actividad Académica') + '</h2><div style="font-size:12px;color:#64748b">Define horario, lugar y sede de la actividad con código QR.</div></div>' +
+                '<div><h2 style="margin:0">' + (editingId ? 'Modificar Actividad Académica' : 'Registrar Nueva Actividad Académica') + '</h2><div style="font-size:12px;color:#64748b">Define horario de inicio/fin para cierre automático de asistencia QR, lugar y sede.</div></div>' +
               '</div>' +
               '<div class="nc-card">' +
                 '<form onsubmit="AppMain.saveActividad(event)">' +
                   '<div class="nc-form-grid">' +
                     '<div class="nc-field"><label>Título de la clase o actividad *</label><input id="aTitulo" required class="nc-input" value="' + esc(aRec.titulo || '') + '" placeholder="Título *" /></div>' +
                     '<div class="nc-field"><label>Tipo</label><select id="aTipo" class="nc-input">' + tipoOptsHtml + '</select></div>' +
-                    '<div class="nc-field"><label>Fecha *</label><input id="aFecha" type="date" required value="' + esc(aRec.fecha || today) + '" class="nc-input" /></div>' +
-                    '<div class="nc-field"><label>Hora *</label><input id="aHora" type="time" required value="' + esc(aRec.hora || '08:00') + '" class="nc-input" /></div>' +
+                    '<div class="nc-field"><label>Fecha *</label><input id="aFecha" type="date" required value="' + esc(String(aRec.fecha || today).slice(0, 10)) + '" class="nc-input" /></div>' +
+                    '<div class="nc-field"><label>Hora de Inicio *</label><input id="aHora" type="time" required value="' + esc(iniVal) + '" class="nc-input" /></div>' +
+                    '<div class="nc-field"><label>Hora de Fin (Cierre auto. QR)</label><input id="aHoraFin" type="time" value="' + esc(finVal) + '" class="nc-input" /><small style="font-size:11px;color:#64748b;display:block;margin-top:4px">Opcional. Cumplida esta hora el QR dejará de aceptar asistencias.</small></div>' +
                     '<div class="nc-field"><label>Lugar / Aula *</label><input id="aLugar" required class="nc-input" value="' + esc(aRec.lugar || '') + '" placeholder="Lugar / Aula *" /></div>' +
                     '<div class="nc-field"><label>Sede</label><select id="aSede" class="nc-input">' + sedeOpts + '</select></div>' +
                   '</div>' +
@@ -2128,18 +2247,31 @@
 
           vp.innerHTML =
             '<div class="nc-head-row">' +
-              '<div><h2 style="margin:0">Actividades (' + list.length + ')</h2><div style="font-size:12px;color:#64748b">Crea actividades académicas y presiona "Ver QR" para proyectar o imprimir el código de asistencia en el aula.</div></div>' +
+              '<div><h2 style="margin:0">Actividades (' + list.length + ')</h2><div style="font-size:12px;color:#64748b">Crea actividades, controla la apertura/cierre de asistencia QR y proyecta el código QR en aula.</div></div>' +
               '<button type="button" class="nc-btn-sm" onclick="AppMain.navigate(\'activities\', true)">+ Crear Nueva Actividad</button>' +
             '</div>' +
             '<div id="qrPreviewWrap" class="hidden nc-card"></div>' +
             '<div class="nc-card">' +
-            '<table class="nc-table"><thead><tr><th>Actividad</th><th>Fecha/Hora</th><th>Lugar</th><th>Token QR</th><th style="text-align:right">Acciones</th></tr></thead><tbody>' +
+            '<table class="nc-table"><thead><tr><th>Actividad</th><th>Fecha / Horario</th><th>Lugar</th><th>Estado QR</th><th style="text-align:right">Acciones</th></tr></thead><tbody>' +
             list.map(function (a) {
-              return '<tr><td><strong>' + esc(a.titulo) + '</strong><br><small style="color:#64748b">' + esc(a.tipo) + '</small></td><td>' + esc(a.fecha) + ' ' + esc(a.hora) + '</td><td>' + esc(a.lugar) + '</td><td><code>' + esc(a.qrToken) + '</code></td>' +
+              var st = getActCloseState_(a);
+              var hIni = normActHHMM_(a.horaInicio || a.hora) || String(a.hora || '');
+              var hFin = normActHHMM_(a.horaFin);
+              var statusPill = st.closed
+                ? '<span class="nc-badge" style="background:' + (st.reason === 'MANUAL' ? '#ffe4e6;color:#be123c' : '#fef3c7;color:#92400e') + '">' + (st.reason === 'MANUAL' ? 'Cerrada manualmente' : 'Cerrada por horario') + '</span>'
+                : '<span class="nc-badge nc-badge-pass">Clase Abierta · QR activo</span>';
+              var toggleBtn = st.closed
+                ? '<button type="button" class="nc-btn-sm" style="background:#059669" onclick="AppMain.toggleActividadCerrada(\'' + esc(a.id) + '\', false)">Abrir Clase</button>'
+                : '<button type="button" class="nc-btn-out" style="border-color:#fdba74;color:#c2410c" onclick="AppMain.toggleActividadCerrada(\'' + esc(a.id) + '\', true)">Cerrar Clase</button>';
+              return '<tr><td><strong>' + esc(a.titulo) + '</strong><br><small style="color:#64748b">' + esc(a.tipo) + '</small></td>' +
+                '<td>' + esc(String(a.fecha || '').slice(0, 10)) + '<br><small style="color:#475569">Inicio: ' + esc(hIni) + (hFin ? ' · Cierre QR: ' + esc(hFin) : '') + '</small></td>' +
+                '<td>' + esc(a.lugar) + '</td>' +
+                '<td>' + statusPill + '<br><code style="font-size:11px">' + esc(a.qrToken) + '</code></td>' +
                 '<td style="text-align:right;white-space:nowrap"><div class="nc-btn-row">' +
                   '<button type="button" class="nc-btn-sm" onclick="AppMain.showQrPreview(\'' + esc(a.id) + '\')">Ver QR</button>' +
                   '<button type="button" class="nc-btn-edit" onclick="AppMain.editItem(\'activities\', \'' + esc(a.id) + '\')">Modificar</button>' +
                   '<button type="button" class="nc-btn-del" onclick="AppMain.deleteItem(\'actividades.delete\', \'' + esc(a.id) + '\', \'activities\')">Eliminar</button>' +
+                  toggleBtn +
                 '</div></td></tr>';
             }).join('') + '</tbody></table></div>';
         }).catch(function (err) {
@@ -2195,7 +2327,7 @@
           vp.innerHTML =
             '<div class="nc-head-row">' +
               '<div><h2 style="margin:0">Calificaciones Neumocursos</h2><div style="font-size:12px;color:#64748b">Consolidado por categorías (Naranja Cat. 1 · Azul Cat. 2 · Verde Cat. 3 · Dorado General).</div></div>' +
-              '<button type="button" class="nc-btn-sm" onclick="AppMain.togglePanel(\'panelExcelUpload\')">↑ Subir Calificaciones desde Excel</button>' +
+              (hasPerm_('grades.upload') ? '<button type="button" class="nc-btn-sm" onclick="AppMain.togglePanel(\'panelExcelUpload\')">↑ Subir Calificaciones desde Excel</button>' : '') +
             '</div>' +
             '<div id="panelExcelUpload" class="nc-card ' + (openCreate ? '' : 'hidden') + '">' +
               '<h3 style="margin-top:0">Importar Archivos Excel de Calificaciones</h3>' +
@@ -2337,6 +2469,15 @@
           '</div>';
         cfgActivityTypesState_ = getActivityTypes_();
         renderCfgActivityTypes_();
+      } else if (tab === 'profile') {
+        profileDraftFoto_ = null;
+        vp.innerHTML =
+          '<div style="max-width:680px">' +
+            '<div class="nc-head-row" style="margin-bottom:14px">' +
+              '<div><h2 style="margin:0">Mi Perfil</h2><div style="font-size:12px;color:#64748b">Sube tu fotografía de perfil y actualiza tu contraseña de acceso.</div></div>' +
+            '</div>' +
+            buildProfileCardsHtml_('pc') +
+          '</div>';
       }
     }
 
@@ -2654,6 +2795,7 @@
       if (!items.length) {
         return '<div style="padding:28px;text-align:center;color:#64748b;font-size:13px">No se encontraron residentes para la sede seleccionada.</div>';
       }
+      var canEdit = canManageResidents_();
       var rows = items.map(function (r) {
         var tels = [r.telefono1, r.telefono2].filter(Boolean).join(' / ') || '—';
         var sedeName = (sedeMap && sedeMap[r.sedeId]) || r.sedeId || '—';
@@ -2668,14 +2810,16 @@
           '<td>' + esc(sedeName) + '</td>' +
           '<td>' + esc(r.coordinador || '—') + '</td>' +
           '<td>' + neumoUser + '</td>' +
-          '<td style="text-align:right;white-space:nowrap"><div class="nc-btn-row">' +
-            '<button type="button" class="nc-btn-edit" onclick="AppMain.editItem(\'residents\', \'' + esc(r.id) + '\')">Modificar</button>' +
-            '<button type="button" class="nc-btn-del" onclick="AppMain.deleteItem(\'residentes.delete\', \'' + esc(r.id) + '\', \'residents\')">Eliminar</button>' +
-          '</div></td>' +
+          (canEdit
+            ? '<td style="text-align:right;white-space:nowrap"><div class="nc-btn-row">' +
+                '<button type="button" class="nc-btn-edit" onclick="AppMain.editItem(\'residents\', \'' + esc(r.id) + '\')">Modificar</button>' +
+                '<button type="button" class="nc-btn-del" onclick="AppMain.deleteItem(\'residentes.delete\', \'' + esc(r.id) + '\', \'residents\')">Eliminar</button>' +
+              '</div></td>'
+            : '') +
         '</tr>';
       }).join('');
       return '<div style="overflow-x:auto"><table class="nc-table">' +
-        '<thead><tr><th>Nombres y Apellidos</th><th>Cédula</th><th>Teléfonos</th><th>Grado</th><th>Sede</th><th>Coordinador</th><th>Usuario Neumocursos</th><th style="text-align:right">Acciones</th></tr></thead>' +
+        '<thead><tr><th>Nombres y Apellidos</th><th>Cédula</th><th>Teléfonos</th><th>Grado</th><th>Sede</th><th>Coordinador</th><th>Usuario Neumocursos</th>' + (canEdit ? '<th style="text-align:right">Acciones</th>' : '') + '</tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div>' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:#64748b">' +
           '<span>Página ' + res.page + ' de ' + res.totalPages + ' · ' + res.total + ' residente(s)</span>' +
@@ -2923,13 +3067,49 @@
       });
     }
 
+    function normActHHMM_(val) {
+      if (!val) return '';
+      var s = String(val).trim();
+      var m = s.match(/^(\d{1,2}):(\d{2})/);
+      if (m) return ('0' + Number(m[1])).slice(-2) + ':' + m[2];
+      if (/T\d{2}:\d{2}/.test(s)) {
+        var d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+        }
+      }
+      return '';
+    }
+
+    function getActCloseState_(act) {
+      if (!act) return { closed: false, reason: 'OPEN' };
+      var isMan = act.cerrada === true || String(act.cerrada).toLowerCase() === 'true' || act.cerrada === 1;
+      if (isMan) return { closed: true, reason: 'MANUAL' };
+      var horaFin = normActHHMM_(act.horaFin);
+      var abiertaManual = act.abiertaManual === true || String(act.abiertaManual).toLowerCase() === 'true' || act.abiertaManual === 1;
+      if (horaFin && !abiertaManual && act.fecha) {
+        var now = new Date();
+        var nowFecha = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
+        var nowHora = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+        var actFecha = String(act.fecha).slice(0, 10);
+        if (nowFecha > actFecha || (nowFecha === actFecha && nowHora >= horaFin)) {
+          return { closed: true, reason: 'AUTO_HORA' };
+        }
+      }
+      return { closed: false, reason: 'OPEN' };
+    }
+
     function saveActividad(e) {
       e.preventDefault();
+      var hIni = document.getElementById('aHora').value;
+      var hFinEl = document.getElementById('aHoraFin');
       var payload = {
         titulo: document.getElementById('aTitulo').value,
         tipo: document.getElementById('aTipo').value,
         fecha: document.getElementById('aFecha').value,
-        hora: document.getElementById('aHora').value,
+        hora: hIni,
+        horaInicio: hIni,
+        horaFin: hFinEl ? hFinEl.value : '',
         lugar: document.getElementById('aLugar').value,
         sedeId: document.getElementById('aSede').value
       };
@@ -2939,6 +3119,20 @@
         navigate('activities');
       }).catch(function (err) {
         showActionNotice('err', err.message);
+      });
+    }
+
+    function toggleActividadCerrada(id, closeClass) {
+      var act = editCache.activities && editCache.activities[id];
+      AppClient.callApi('actividades.update', {
+        id: id,
+        titulo: (act && act.titulo) || undefined,
+        cerrada: Boolean(closeClass),
+        abiertaManual: !closeClass
+      }).then(function () {
+        navigate('activities');
+      }).catch(function (err) {
+        showActionNotice('err', err && err.message ? err.message : String(err));
       });
     }
 
@@ -5202,6 +5396,17 @@
         });
       } else if (target === 'calendar') {
         loadMobCalendar_();
+      } else if (target === 'profile') {
+        profileDraftFoto_ = null;
+        mob.innerHTML =
+          '<div class="nc-mob-stack">' +
+            '<button type="button" onclick="AppMain.renderMobileHome()" class="nc-mob-back-btn">← Volver a Tarjetas</button>' +
+            '<div class="nc-mob-panel">' +
+              '<h3 style="font-size:17px;font-weight:700;color:#0f172a;margin:0">Mi Perfil</h3>' +
+              '<p style="font-size:12px;color:#64748b;margin:4px 0 14px">Sube tu fotografía de perfil y actualiza tu contraseña de acceso.</p>' +
+              buildProfileCardsHtml_('mob') +
+            '</div>' +
+          '</div>';
       } else {
         mob.innerHTML =
           '<div class="nc-mob-stack">' +
@@ -5209,6 +5414,141 @@
             '<div class="nc-mob-panel">Módulo ' + esc(target) + ' cargado correctamente.</div>' +
           '</div>';
       }
+    }
+
+    function buildProfileCardsHtml_(prefix) {
+      var u = currentUser || {};
+      var curFoto = profileDraftFoto_ !== null ? profileDraftFoto_ : (u.fotoUrl || '');
+      var avHtml = curFoto
+        ? '<img src="' + esc(curFoto) + '" alt="Foto" style="width:100%;height:100%;object-fit:cover;display:block" />'
+        : '<span style="font-size:24px;font-weight:700;color:#2563eb">' + esc(getInitials_(u.nombre)) + '</span>';
+      var eyeSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+      return '' +
+        '<div id="' + prefix + 'ProfNotice"></div>' +
+        '<div class="nc-card" style="margin-bottom:14px">' +
+          '<h3 style="margin-top:0;font-size:15px">Fotografía e Identidad</h3>' +
+          '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:16px">' +
+            '<div id="' + prefix + 'ProfAvatarBox" style="width:82px;height:82px;border-radius:999px;background:#eff6ff;border:2px solid #cbd5e1;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + avHtml + '</div>' +
+            '<div style="flex:1;min-width:200px">' +
+              '<div class="nc-btn-row" style="margin-bottom:6px">' +
+                '<label class="nc-btn-out" style="cursor:pointer">↑ Subir / Cambiar Foto<input type="file" accept="image/*" style="display:none" onchange="AppMain.profOnPhotoSelected(this, \'' + prefix + '\')" /></label>' +
+                '<button type="button" id="' + prefix + 'ProfRemoveBtn" class="nc-btn-del' + (curFoto ? '' : ' hidden') + '" onclick="AppMain.profRemovePhoto(\'' + prefix + '\')">Quitar foto</button>' +
+                '<button type="button" id="' + prefix + 'ProfSavePhotoBtn" class="nc-btn-sm" onclick="AppMain.profSavePhoto(\'' + prefix + '\')">Guardar Fotografía</button>' +
+              '</div>' +
+              '<div style="font-size:11px;color:#64748b">Se optimiza automáticamente para guardarse de forma rápida y segura.</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="nc-field" style="margin-bottom:0">' +
+            '<label>Nombre de Usuario (solo lectura)</label>' +
+            '<input class="nc-input" value="' + esc(u.nombre || '') + '" disabled readonly style="background:#f8fafc;color:#475569;cursor:not-allowed" />' +
+            '<small style="font-size:11px;color:#64748b;display:block;margin-top:4px">Tu nombre de usuario es informativo y no puede modificarse.</small>' +
+          '</div>' +
+        '</div>' +
+        '<div class="nc-card" style="margin-bottom:0">' +
+          '<h3 style="margin-top:0;font-size:15px">Cambiar Contraseña</h3>' +
+          '<p style="font-size:12px;color:#64748b;margin:0 0 12px">Por seguridad, ingresa tu contraseña anterior junto con la nueva clave y su confirmación.</p>' +
+          '<form onsubmit="AppMain.profSavePassword(event, \'' + prefix + '\')">' +
+            '<div class="nc-field">' +
+              '<label>Contraseña anterior *</label>' +
+              '<div class="nc-pass-wrap">' +
+                '<input id="' + prefix + 'ProfCurPass" type="password" required class="nc-input" placeholder="Ingresa tu contraseña actual" />' +
+                '<button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword(\'' + prefix + 'ProfCurPass\', this)" aria-label="Mostrar u ocultar contraseña anterior">' + eyeSvg + '</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="nc-form-grid">' +
+              '<div class="nc-field">' +
+                '<label>Nueva contraseña (mín. 6 caracteres) *</label>' +
+                '<div class="nc-pass-wrap">' +
+                  '<input id="' + prefix + 'ProfNewPass" type="password" minlength="6" required class="nc-input" placeholder="Mínimo 6 caracteres" />' +
+                  '<button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword(\'' + prefix + 'ProfNewPass\', this)" aria-label="Mostrar u ocultar nueva contraseña">' + eyeSvg + '</button>' +
+                '</div>' +
+              '</div>' +
+              '<div class="nc-field">' +
+                '<label>Confirmar nueva contraseña *</label>' +
+                '<div class="nc-pass-wrap">' +
+                  '<input id="' + prefix + 'ProfConfPass" type="password" minlength="6" required class="nc-input" placeholder="Repite la nueva contraseña" />' +
+                  '<button type="button" class="nc-pass-eye" onclick="AuthUI.togglePassword(\'' + prefix + 'ProfConfPass\', this)" aria-label="Mostrar u ocultar confirmación">' + eyeSvg + '</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            '<button type="submit" id="' + prefix + 'ProfSavePassBtn" class="nc-btn-sm">Actualizar Contraseña</button>' +
+          '</form>' +
+        '</div>';
+    }
+
+    function updateProfPreview_(prefix, fotoVal) {
+      var box = document.getElementById(prefix + 'ProfAvatarBox');
+      if (box) {
+        box.innerHTML = fotoVal
+          ? '<img src="' + esc(fotoVal) + '" alt="Foto" style="width:100%;height:100%;object-fit:cover;display:block" />'
+          : '<span style="font-size:24px;font-weight:700;color:#2563eb">' + esc(getInitials_(currentUser && currentUser.nombre)) + '</span>';
+      }
+      var remBtn = document.getElementById(prefix + 'ProfRemoveBtn');
+      if (remBtn) remBtn.classList.toggle('hidden', !fotoVal);
+    }
+
+    function profOnPhotoSelected(input, prefix) {
+      var file = input && input.files && input.files[0];
+      if (!file) return;
+      compressAvatarFile_(file).then(function (dataUrl) {
+        profileDraftFoto_ = dataUrl;
+        updateProfPreview_(prefix, dataUrl);
+        showModuleNotice_(prefix + 'ProfNotice', 'ok', 'Fotografía lista. Pulsa "Guardar Fotografía" para aplicarla.');
+      }).catch(function (err) {
+        showModuleNotice_(prefix + 'ProfNotice', 'err', err && err.message ? err.message : String(err));
+      });
+      input.value = '';
+    }
+
+    function profRemovePhoto(prefix) {
+      profileDraftFoto_ = '';
+      updateProfPreview_(prefix, '');
+      showModuleNotice_(prefix + 'ProfNotice', 'ok', 'Fotografía removida. Pulsa "Guardar Fotografía" para confirmar.');
+    }
+
+    function profSavePhoto(prefix) {
+      var btn = document.getElementById(prefix + 'ProfSavePhotoBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+      var fotoToSave = profileDraftFoto_ !== null ? profileDraftFoto_ : ((currentUser && currentUser.fotoUrl) || '');
+      AppClient.callApi('auth.profile', { fotoUrl: fotoToSave }).then(function (updatedUser) {
+        if (updatedUser) currentUser = updatedUser;
+        profileDraftFoto_ = null;
+        updateProfPreview_(prefix, (currentUser && currentUser.fotoUrl) || '');
+        renderUserHeaderChips_();
+        showModuleNotice_(prefix + 'ProfNotice', 'ok', 'Fotografía de perfil guardada correctamente.');
+      }).catch(function (err) {
+        showModuleNotice_(prefix + 'ProfNotice', 'err', err && err.message ? err.message : String(err));
+      }).finally(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Guardar Fotografía'; }
+      });
+    }
+
+    function profSavePassword(e, prefix) {
+      e.preventDefault();
+      var curEl = document.getElementById(prefix + 'ProfCurPass');
+      var newEl = document.getElementById(prefix + 'ProfNewPass');
+      var confEl = document.getElementById(prefix + 'ProfConfPass');
+      var cur = curEl ? curEl.value : '';
+      var nxt = newEl ? newEl.value : '';
+      var cnf = confEl ? confEl.value : '';
+      if (!cur) { showModuleNotice_(prefix + 'ProfNotice', 'err', 'Ingresa tu contraseña anterior.'); return; }
+      if (nxt.length < 6) { showModuleNotice_(prefix + 'ProfNotice', 'err', 'La nueva contraseña debe tener al menos 6 caracteres.'); return; }
+      if (nxt === cur) { showModuleNotice_(prefix + 'ProfNotice', 'err', 'La nueva contraseña debe ser diferente a la contraseña anterior.'); return; }
+      if (nxt !== cnf) { showModuleNotice_(prefix + 'ProfNotice', 'err', 'La nueva contraseña y su confirmación no coinciden.'); return; }
+      var btn = document.getElementById(prefix + 'ProfSavePassBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Actualizando...'; }
+      AppClient.callApi('auth.changePassword', {
+        currentPassword: cur,
+        newPassword: nxt,
+        confirmPassword: cnf
+      }).then(function (res) {
+        AuthUI.resetPasswordFields([prefix + 'ProfCurPass', prefix + 'ProfNewPass', prefix + 'ProfConfPass']);
+        showModuleNotice_(prefix + 'ProfNotice', 'ok', (res && res.message) || 'Contraseña actualizada correctamente.');
+      }).catch(function (err) {
+        showModuleNotice_(prefix + 'ProfNotice', 'err', err && err.message ? err.message : String(err));
+      }).finally(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Actualizar Contraseña'; }
+      });
     }
 
     function scanQr(qrToken) {
@@ -5337,6 +5677,11 @@
       saveCoordinador: saveCoordinador,
       saveSede: saveSede,
       saveActividad: saveActividad,
+      toggleActividadCerrada: toggleActividadCerrada,
+      profOnPhotoSelected: profOnPhotoSelected,
+      profRemovePhoto: profRemovePhoto,
+      profSavePhoto: profSavePhoto,
+      profSavePassword: profSavePassword,
       deleteItem: deleteItem,
       showQrPreview: showQrPreview,
       printQrPoster: printQrPoster,
